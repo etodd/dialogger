@@ -126,6 +126,11 @@ Editor tools
 	stroke-width: 0;
 }
 
+.port-label
+{
+	display: none;
+}
+
 /*
 Node styles
 */

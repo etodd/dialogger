@@ -1,0 +1,8 @@
+{
+	"name": "Dialogger",
+	"main": "index.html",
+	"window":
+	{
+		"title": "Dialogger"
+	}
+}

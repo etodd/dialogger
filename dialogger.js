@@ -1,122 +1,60 @@
-var fs = null;
-addEventListener('app-ready', function(e)
-{
-	// We're running inside app.js
-	fs = require('fs');
-	$('#import').hide();
-	$('#export').hide();
-	$('#export-game').hide();
-});
+var fs = require('fs');
 
-var graph = new joint.dia.Graph();
+// Constants
 
-var defaultLink = new joint.dia.Link(
+var con =
 {
-	attrs:
+	allowable_connections:
+	[
+		['dialogue.Text', 'dialogue.Text'],
+		['dialogue.Text', 'dialogue.Node'],
+		['dialogue.Text', 'dialogue.Choice'],
+		['dialogue.Text', 'dialogue.Set'],
+		['dialogue.Text', 'dialogue.Branch'],
+		['dialogue.Node', 'dialogue.Text'],
+		['dialogue.Node', 'dialogue.Node'],
+		['dialogue.Node', 'dialogue.Choice'],
+		['dialogue.Node', 'dialogue.Set'],
+		['dialogue.Node', 'dialogue.Branch'],
+		['dialogue.Choice', 'dialogue.Text'],
+		['dialogue.Choice', 'dialogue.Node'],
+		['dialogue.Choice', 'dialogue.Set'],
+		['dialogue.Choice', 'dialogue.Branch'],
+		['dialogue.Set', 'dialogue.Text'],
+		['dialogue.Set', 'dialogue.Node'],
+		['dialogue.Set', 'dialogue.Set'],
+		['dialogue.Set', 'dialogue.Branch'],
+		['dialogue.Branch', 'dialogue.Text'],
+		['dialogue.Branch', 'dialogue.Node'],
+		['dialogue.Branch', 'dialogue.Set'],
+		['dialogue.Branch', 'dialogue.Branch'],
+	],
+
+	default_link: new joint.dia.Link(
 	{
-		'.marker-target': { d: 'M 10 0 L 0 5 L 10 10 z', },
-		'.link-tools .tool-remove circle, .marker-vertex': { r: 8 },
-	},
-});
-defaultLink.set('smooth', true);
-
-var allowableConnections =
-[
-	['dialogue.Text', 'dialogue.Text'],
-	['dialogue.Text', 'dialogue.Node'],
-	['dialogue.Text', 'dialogue.Choice'],
-	['dialogue.Text', 'dialogue.Set'],
-	['dialogue.Text', 'dialogue.Branch'],
-	['dialogue.Node', 'dialogue.Text'],
-	['dialogue.Node', 'dialogue.Node'],
-	['dialogue.Node', 'dialogue.Choice'],
-	['dialogue.Node', 'dialogue.Set'],
-	['dialogue.Node', 'dialogue.Branch'],
-	['dialogue.Choice', 'dialogue.Text'],
-	['dialogue.Choice', 'dialogue.Node'],
-	['dialogue.Choice', 'dialogue.Set'],
-	['dialogue.Choice', 'dialogue.Branch'],
-	['dialogue.Set', 'dialogue.Text'],
-	['dialogue.Set', 'dialogue.Node'],
-	['dialogue.Set', 'dialogue.Set'],
-	['dialogue.Set', 'dialogue.Branch'],
-	['dialogue.Branch', 'dialogue.Text'],
-	['dialogue.Branch', 'dialogue.Node'],
-	['dialogue.Branch', 'dialogue.Set'],
-	['dialogue.Branch', 'dialogue.Branch'],
-];
-
-function validateConnection(cellViewS, magnetS, cellViewT, magnetT, end, linkView)
-{
-	// Prevent loop linking
-	if (magnetS == magnetT)
-		return false;
-
-	if (cellViewS == cellViewT)
-		return false;
-
-	if (magnetT.attributes.magnet.nodeValue !== 'passive') // Can't connect to an output port
-		return false;
-
-	var sourceType = cellViewS.model.attributes.type;
-	var targetType = cellViewT.model.attributes.type;
-	var valid = false;
-	for (var i = 0; i < allowableConnections.length; i++)
-	{
-		var rule = allowableConnections[i];
-		if (sourceType == rule[0] && targetType == rule[1])
+		attrs:
 		{
-			valid = true;
-			break;
-		}
-	}
-	if (!valid)
-		return false;
+			'.marker-target': { d: 'M 10 0 L 0 5 L 10 10 z', },
+			'.link-tools .tool-remove circle, .marker-vertex': { r: 8 },
+		},
+	}),
+};
+con.default_link.set('smooth', true);
 
-	var links = graph.getConnectedLinks(cellViewS.model);
-	for (var i = 0; i < links.length; i++)
-	{
-		var link = links[i];
-		if (link.attributes.source.id === cellViewS.model.id && link.attributes.source.port === magnetS.attributes.port.nodeValue && link.attributes.target.id)
-		{
-			var targetCell = graph.getCell(link.attributes.target.id);
-			if (targetCell.attributes.type !== targetType)
-				return false; // We can only connect to multiple targets of the same type
-			if (targetCell == cellViewT.model)
-				return false; // Already connected
-		} 
-	}
+// State
 
-	return true;
-}
-
-function validateMagnet(cellView, magnet)
+var state =
 {
-	if (magnet.getAttribute('magnet') === 'passive')
-		return false;
+	graph: new joint.dia.Graph(),
+	paper: null,
+	filepath: null,
+	panning: false,
+	mouse_position: { x: 0, y: 0 },
+	context_position: { x: 0, y: 0 },
+	menu: null,
+};
 
-	// If unlimited connections attribute is null, we can only ever connect to one object
-	// If it is not null, it is an array of type strings which are allowed to have unlimited connections
-	var unlimitedConnections = magnet.getAttribute('unlimitedConnections');
-	var links = graph.getConnectedLinks(cellView.model);
-	for (var i = 0; i < links.length; i++)
-	{
-		var link = links[i];
-		if (link.attributes.source.id === cellView.model.id && link.attributes.source.port === magnet.attributes.port.nodeValue)
-		{
-			// This port already has a connection
-			if (unlimitedConnections && link.attributes.target.id)
-			{
-				var targetCell = graph.getCell(link.attributes.target.id);
-				if (unlimitedConnections.indexOf(targetCell.attributes.type) !== -1)
-					return true; // It's okay because this target type has unlimited connections
-			} 
-			return false;
-		}
-	}
-
-	return true;
-}
+// Models
 
 joint.shapes.dialogue = {};
 joint.shapes.dialogue.Base = joint.shapes.devs.Model.extend(
@@ -131,8 +69,6 @@ joint.shapes.dialogue.Base = joint.shapes.devs.Model.extend(
 			{
 				rect: { stroke: 'none', 'fill-opacity': 0 },
 				text: { display: 'none' },
-				'.inPorts circle': { magnet: 'passive' },
-				'.outPorts circle': { magnet: true, },
 			},
 		},
 		joint.shapes.devs.Model.prototype.defaults
@@ -405,9 +341,85 @@ joint.shapes.dialogue.SetView = joint.shapes.dialogue.BaseView.extend(
 	},
 });
 
-function gameData()
+// Functions
+
+var func = {};
+
+func.validate_connection = function(cellViewS, magnetS, cellViewT, magnetT, end, linkView)
 {
-	var cells = graph.toJSON().cells;
+	// Prevent loop linking
+	if (magnetS === magnetT)
+		return false;
+
+	if (cellViewS === cellViewT)
+		return false;
+
+	if ($(magnetT).parents('.outPorts').length > 0) // Can't connect to an output port
+		return false;
+
+	var sourceType = cellViewS.model.attributes.type;
+	var targetType = cellViewT.model.attributes.type;
+	var valid = false;
+	for (var i = 0; i < con.allowable_connections.length; i++)
+	{
+		var rule = con.allowable_connections[i];
+		if (sourceType === rule[0] && targetType === rule[1])
+		{
+			valid = true;
+			break;
+		}
+	}
+	if (!valid)
+		return false;
+
+	var links = state.graph.getConnectedLinks(cellViewS.model);
+	for (var i = 0; i < links.length; i++)
+	{
+		var link = links[i];
+		if (link.attributes.source.id === cellViewS.model.id && link.attributes.source.port === magnetS.attributes.port.nodeValue && link.attributes.target.id)
+		{
+			var targetCell = state.graph.getCell(link.attributes.target.id);
+			if (targetCell.attributes.type !== targetType)
+				return false; // We can only connect to multiple targets of the same type
+			if (targetCell === cellViewT.model)
+				return false; // Already connected
+		} 
+	}
+
+	return true;
+};
+
+func.validate_magnet = function(cellView, magnet)
+{
+	if ($(magnet).parents('.outPorts').length === 0)
+		return false; // we only want output ports
+
+	// If unlimited connections attribute is null, we can only ever connect to one object
+	// If it is not null, it is an array of type strings which are allowed to have unlimited connections
+	var unlimitedConnections = magnet.getAttribute('unlimitedConnections');
+	var links = state.graph.getConnectedLinks(cellView.model);
+	for (var i = 0; i < links.length; i++)
+	{
+		var link = links[i];
+		if (link.attributes.source.id === cellView.model.id && link.attributes.source.port === magnet.attributes.port.nodeValue)
+		{
+			// This port already has a connection
+			if (unlimitedConnections && link.attributes.target.id)
+			{
+				var targetCell = state.graph.getCell(link.attributes.target.id);
+				if (unlimitedConnections.indexOf(targetCell.attributes.type) !== -1)
+					return true; // It's okay because this target type has unlimited connections
+			} 
+			return false;
+		}
+	}
+
+	return true;
+};
+
+func.optimized_data = function()
+{
+	var cells = state.graph.toJSON().cells;
 	var nodesByID = {};
 	var cellsByID = {};
 	var nodes = [];
@@ -421,7 +433,7 @@ function gameData()
 				type: cell.type.slice('dialogue.'.length),
 				id: cell.id,
 			};
-			if (node.type == 'Branch')
+			if (node.type === 'Branch')
 			{
 				node.variable = cell.name;
 				node.branches = {};
@@ -431,7 +443,7 @@ function gameData()
 					node.branches[branch] = null;
 				}
 			}
-			else if (node.type == 'Set')
+			else if (node.type === 'Set')
 			{
 				node.variable = cell.name;
 				node.value = cell.value;
@@ -450,17 +462,17 @@ function gameData()
 	for (var i = 0; i < cells.length; i++)
 	{
 		var cell = cells[i];
-		if (cell.type == 'link')
+		if (cell.type === 'link')
 		{
 			var source = nodesByID[cell.source.id];
 			var target = cell.target ? nodesByID[cell.target.id] : null;
 			if (source)
 			{
-				if (source.type == 'Branch')
+				if (source.type === 'Branch')
 				{
 					var portNumber = parseInt(cell.source.port.slice('output'.length));
 					var value;
-					if (portNumber == 0)
+					if (portNumber === 0)
 						value = '_default';
 					else
 					{
@@ -469,7 +481,7 @@ function gameData()
 					}
 					source.branches[value] = target ? target.id : null;
 				}
-				else if ((source.type == 'Text' || source.type == 'Node') && target && target.type == 'Choice')
+				else if ((source.type === 'Text' || source.type === 'Node') && target && target.type === 'Choice')
 				{
 					if (!source.choices)
 					{
@@ -484,14 +496,11 @@ function gameData()
 		}
 	}
 	return nodes;
-}
+};
 
 // Menu actions
 
-var filename = null;
-var defaultFilename = 'dialogue.dl';
-
-function flash(text)
+func.flash = function(text)
 {
 	var $flash = $('#flash');
 	$flash.text(text);
@@ -499,332 +508,229 @@ function flash(text)
 	$flash.show();
 	$flash.css('opacity', 1.0);
 	$flash.fadeOut({ duration: 1500 });
-}
+};
 
-function offerDownload(name, data)
-{
-	var a = $('<a>');
-	a.attr('download', name);
-	a.attr('href', 'data:application/json,' + encodeURIComponent(JSON.stringify(data)));
-	a.attr('target', '_blank');
-	a.hide();
-	$('body').append(a);
-	a[0].click();
-	a.remove();
-}
-
-function promptFilename(callback)
-{
-	if (fs)
-	{
-		filename = null;
-		window.frame.openDialog(
-		{
-			type: 'save',
-		}, function(err, files)
-		{
-			if (!err && files.length == 1)
-			{
-				filename = files[0];
-				callback(filename);
-			}
-		});
-	}
-	else
-	{
-		filename = prompt('Filename', defaultFilename);
-		callback(filename);
-	}
-}
-
-function applyTextFields()
+func.apply_text_fields = function()
 {
 	$('input[type=text]').blur();
-}
+};
 
-function save()
+func.save = function()
 {
-	applyTextFields();
-	if (!filename)
-		promptFilename(doSave);
+	func.apply_text_fields();
+
+	if (!state.filepath)
+		func.show_save_dialog();
 	else
-		doSave();
-}
+		func.do_save();
+};
 
-function doSave()
-{
-	if (filename)
-	{
-		if (fs)
-		{
-			fs.writeFileSync(filename, JSON.stringify(graph), 'utf8');
-			fs.writeFileSync(gameFilenameFromNormalFilename(filename), JSON.stringify(gameData()), 'utf8');
-		}
-		else
-		{
-			if (!localStorage[filename])
-				addFileEntry(filename);
-			localStorage[filename] = JSON.stringify(graph);
-		}
-		flash('Saved ' + filename);
-	}
-}
-
-function load()
-{
-	if (fs)
-	{
-		window.frame.openDialog(
-		{
-			type: 'open',
-			multiSelect: false,
-		}, function(err, files)
-		{
-			if (!err && files.length == 1)
-			{
-				graph.clear();
-				filename = files[0];
-				graph.fromJSON(JSON.parse(fs.readFileSync(filename, 'utf8')));
-			}
-		});
-	}
-	else
-		$('#menu').show();
-}
-
-function exportFile()
-{
-	if (!fs)
-	{
-		applyTextFields();
-		offerDownload(filename ? filename : defaultFilename, graph);
-	}
-}
-
-function gameFilenameFromNormalFilename(f)
+func.optimized_filename = function(f)
 {
 	return f.substring(0, f.length - 2) + 'dlz';
-}
+};
 
-function exportGameFile()
+func.do_save = function()
 {
-	if (!fs)
+	if (state.filepath)
 	{
-		applyTextFields();
-		offerDownload(gameFilenameFromNormalFilename(filename ? filename : defaultFilename), gameData());
+		fs.writeFileSync(state.filepath, JSON.stringify(state.graph), 'utf8');
+		fs.writeFileSync(func.optimized_filename(state.filepath), JSON.stringify(func.optimized_data()), 'utf8');
+		func.flash('Saved ' + state.filepath);
 	}
-}
+};
 
-function importFile()
+func.filename_from_filepath = function(f)
 {
-	if (!fs)
-		$('#file').click();
-}
+	return f.replace(/^.*[\\\/]/, '');
+};
 
-function add(constructor)
+func.show_open_dialog = function()
+{
+	$('#file_open').click();
+};
+
+func.show_save_dialog = function()
+{
+	$('#file_save').click();
+};
+
+func.add_node = function(constructor)
 {
 	return function()
 	{
-		var position = $('#cmroot').position();
 		var container = $('#container')[0];
 		var element = new constructor(
 		{
-			position: { x: position.left + container.scrollLeft, y: position.top + container.scrollTop },
+			position: { x: state.context_position.x + container.scrollLeft, y: state.context_position.y + container.scrollTop },
 		});
-		graph.addCells([element]);
+		state.graph.addCells([element]);
 	};
-}
+};
 
-function clear()
+func.clear = function()
 {
-	graph.clear();
-	filename = null;
-}
+	state.graph.clear();
+	state.filepath = null;
+};
 
-// Browser stuff
-
-var paper = new joint.dia.Paper(
+func.handle_open_files = function(files)
 {
-	el: $('#paper'),
-	width: 16000,
-	height: 8000,
-	model: graph,
-	gridSize: 1,
-	defaultLink: defaultLink,
-	validateConnection: validateConnection,
-	validateMagnet: validateMagnet,
-	// Enable link snapping within 75px lookup radius
-	snapLinks: { radius: 75 }
-});
-
-var panning = false;
-var mousePosition = { x: 0, y: 0 };
-paper.on('blank:pointerdown', function(e, x, y)
-{
-	panning = true;
-	mousePosition.x = e.pageX;
-	mousePosition.y = e.pageY;
-	$('body').css('cursor', 'move');
-	applyTextFields();
-});
-paper.on('cell:pointerdown', function(e, x, y)
-{
-	applyTextFields();
-});
-
-$('#container').mousemove(function(e)
-{
-	if (panning)
-	{
-		var $this = $(this);
-		$this.scrollLeft($this.scrollLeft() + mousePosition.x - e.pageX);
-		$this.scrollTop($this.scrollTop() + mousePosition.y - e.pageY);
-		mousePosition.x = e.pageX;
-		mousePosition.y = e.pageY;
-	}
-});
-
-$('#container').mouseup(function (e)
-{
-	panning = false;
-	$('body').css('cursor', 'default');
-});
-
-function handleFiles(files)
-{
-	filename = files[0].name;
+	state.filepath = files[0].path;
+	document.title = func.filename_from_filepath(state.filepath);
 	var fileReader = new FileReader();
 	fileReader.onload = function(e)
 	{
-		graph.clear();
-		graph.fromJSON(JSON.parse(e.target.result));
+		state.graph.clear();
+		state.graph.fromJSON(JSON.parse(e.target.result));
 	};
 	fileReader.readAsText(files[0]);
-}
+};
 
-$('#file').on('change', function()
+func.handle_save_files = function(files)
 {
-	handleFiles(this.files);
-});
+	state.filepath = files[0].path;
+	func.do_save();
+};
 
-$('body').on('dragenter', function(e)
-{
-	e.stopPropagation();
-	e.preventDefault();
-});
-
-$('body').on('dragexit', function(e)
-{
-	e.stopPropagation();
-	e.preventDefault();
-});
-
-$('body').on('dragover', function(e)
-{
-	e.stopPropagation();
-	e.preventDefault();
-});
-
-$('body').on('drop', function(e)
-{
-	e.stopPropagation();
-	e.preventDefault();
-	handleFiles(e.originalEvent.dataTransfer.files);
-});
-
-$(window).on('keydown', function(event)
-{
-	// Catch Ctrl-S or key code 19 on Mac (Cmd-S)
-	if (((event.ctrlKey || event.metaKey) && String.fromCharCode(event.which).toLowerCase() == 's') || event.which == 19)
-	{
-		event.stopPropagation();
-		event.preventDefault();
-		save();
-		return false;
-	}
-	else if ((event.ctrlKey || event.metaKey) && String.fromCharCode(event.which).toLowerCase() == 'o')
-	{
-		event.stopPropagation();
-		event.preventDefault();
-		load();
-		return false;
-	}
-	else if ((event.ctrlKey || event.metaKey) && String.fromCharCode(event.which).toLowerCase() == 'e')
-	{
-		event.stopPropagation();
-		event.preventDefault();
-		exportFile();
-		return false;
-	}
-	return true;
-});
-
-$(window).resize(function()
-{
-	applyTextFields();
-	var $window = $(window);
-	var $container = $('#container');
-		$container.height($window.innerHeight());
-		$container.width($window.innerWidth());
-		var $menu = $('#menu');
-		$menu.css('top', Math.max(0, (($window.height() - $menu.outerHeight()) / 2)) + 'px');
-		$menu.css('left', Math.max(0, (($window.width() - $menu.outerWidth()) / 2)) + 'px');
-		return this;
-});
-
-function addFileEntry(name)
-{
-	var entry = $('<div>');
-	entry.text(name);
-	var deleteButton = $('<button class="delete">-</button>');
-	entry.append(deleteButton);
-	$('#menu').append(entry);
-
-	deleteButton.on('click', function(event)
-	{
-		localStorage.removeItem(name);
-		entry.remove();
-		event.stopPropagation();
-	});
-
-	entry.on('click', function(event)
-	{
-		graph.clear();
-		graph.fromJSON(JSON.parse(localStorage[name]));
-		filename = name;
-		$('#menu').hide();
-	});
-}
+// Initialize
 
 (function()
 {
-	for (var i = 0; i < localStorage.length; i++)
-		addFileEntry(localStorage.key(i));
+	state.paper = new joint.dia.Paper(
+	{
+		el: $('#paper'),
+		width: 16000,
+		height: 8000,
+		model: state.graph,
+		gridSize: 1,
+		defaultLink: con.default_link,
+		validateConnection: func.validate_connection,
+		validateMagnet: func.validate_magnet,
+		snapLinks: { radius: 75 }, // enable link snapping within 75px lookup radius
+		markAvailable: true,
+	});
+
+	state.paper.on('blank:pointerdown', function(e, x, y)
+	{
+		if (e.button === 0 || e.button === 1)
+		{
+			state.panning = true;
+			state.mouse_position.x = e.pageX;
+			state.mouse_position.y = e.pageY;
+			$('body').css('cursor', 'move');
+			func.apply_text_fields();
+		}
+	});
+	state.paper.on('cell:pointerdown', function(e, x, y)
+	{
+		func.apply_text_fields();
+	});
+
+	$('#container').mousemove(function(e)
+	{
+		if (state.panning)
+		{
+			var $this = $(this);
+			$this.scrollLeft($this.scrollLeft() + state.mouse_position.x - e.pageX);
+			$this.scrollTop($this.scrollTop() + state.mouse_position.y - e.pageY);
+			state.mouse_position.x = e.pageX;
+			state.mouse_position.y = e.pageY;
+		}
+	});
+
+	$('#container').mouseup(function(e)
+	{
+		state.panning = false;
+		$('body').css('cursor', 'default');
+	});
+
+	$('#file_open').on('change', function()
+	{
+		func.handle_open_files(this.files);
+	});
+
+	$('#file_save').on('change', function()
+	{
+		func.handle_save_files(this.files);
+	});
+
+	$('body').on('dragenter', function(e)
+	{
+		e.stopPropagation();
+		e.preventDefault();
+	});
+
+	$('body').on('dragexit', function(e)
+	{
+		e.stopPropagation();
+		e.preventDefault();
+	});
+
+	$('body').on('dragover', function(e)
+	{
+		e.stopPropagation();
+		e.preventDefault();
+	});
+
+	$('body').on('drop', function(e)
+	{
+		e.stopPropagation();
+		e.preventDefault();
+		func.handle_open_files(e.originalEvent.dataTransfer.files);
+	});
+
+	$(window).on('keydown', function(event)
+	{
+		// Catch Ctrl-S or key code 19 on Mac (Cmd-S)
+		if (((event.ctrlKey || event.metaKey) && String.fromCharCode(event.which).toLowerCase() === 's') || event.which === 19)
+		{
+			event.stopPropagation();
+			event.preventDefault();
+			func.save();
+			return false;
+		}
+		else if ((event.ctrlKey || event.metaKey) && String.fromCharCode(event.which).toLowerCase() === 'o')
+		{
+			event.stopPropagation();
+			event.preventDefault();
+			func.show_open_dialog();
+			return false;
+		}
+		return true;
+	});
+
+	$(window).resize(function()
+	{
+		func.apply_text_fields();
+		var $window = $(window);
+		var $container = $('#container');
+		$container.height($window.innerHeight());
+		$container.width($window.innerWidth());
+		return this;
+	});
+
+	$(window).trigger('resize');
+
+	// Context menu
+
+	state.menu = new nw.Menu();
+	state.menu.append(new nw.MenuItem({ label: 'Text', click: func.add_node(joint.shapes.dialogue.Text) }));
+	state.menu.append(new nw.MenuItem({ label: 'Choice', click: func.add_node(joint.shapes.dialogue.Choice) }));
+	state.menu.append(new nw.MenuItem({ label: 'Branch', click: func.add_node(joint.shapes.dialogue.Branch) }));
+	state.menu.append(new nw.MenuItem({ label: 'Set', click: func.add_node(joint.shapes.dialogue.Set) }));
+	state.menu.append(new nw.MenuItem({ label: 'Node', click: func.add_node(joint.shapes.dialogue.Node) }));
+	state.menu.append(new nw.MenuItem({ type: 'separator' }));
+	state.menu.append(new nw.MenuItem({ label: 'Save', click: func.save }));
+	state.menu.append(new nw.MenuItem({ label: 'Open', click: func.show_open_dialog }));
+	state.menu.append(new nw.MenuItem({ label: 'New', click: func.clear }));
+
+	document.body.addEventListener('contextmenu', function(e)
+	{
+		e.preventDefault();
+		state.context_position.x = e.x;
+		state.context_position.y = e.y;
+		state.menu.popup(e.x, e.y);
+		return false;
+	}, false);
 })();
-
-$('#menu button.close').click(function()
-{
-	$('#menu').hide();
-});
-
-$(window).trigger('resize');
-
-$('#paper').contextmenu(
-{
-	width: 150,
-	items:
-	[
-		{ text: 'Text', alias: '1-1', action: add(joint.shapes.dialogue.Text) },
-		{ text: 'Choice', alias: '1-2', action: add(joint.shapes.dialogue.Choice) },
-		{ text: 'Branch', alias: '1-3', action: add(joint.shapes.dialogue.Branch) },
-		{ text: 'Set', alias: '1-4', action: add(joint.shapes.dialogue.Set) },
-		{ text: 'Node', alias: '1-5', action: add(joint.shapes.dialogue.Node) },
-		{ type: 'splitLine' },
-		{ text: 'Save', alias: '2-1', action: save },
-		{ text: 'Load', alias: '2-2', action: load },
-		{ text: 'Import', id: 'import', alias: '2-3', action: importFile },
-		{ text: 'New', alias: '2-4', action: clear },
-		{ text: 'Export', id: 'export', alias: '2-5', action: exportFile },
-		{ text: 'Export game file', id: 'export-game', alias: '2-6', action: exportGameFile },
-	]
-});
