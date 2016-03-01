@@ -259,14 +259,14 @@ joint.shapes.dialogue.BranchView = joint.shapes.dialogue.BaseView.extend(
 		for (var i = valueFields.length; i < values.length; i++)
 		{
 			// Prevent paper from handling pointerdown.
-			var field = $('<input type="text" class="value" />');
-			field.attr('placeholder', 'Value ' + (i + 1).toString());
-			field.attr('index', i);
-			this.$box.append(field);
-			field.on('mousedown click', function(evt) { evt.stopPropagation(); });
+			var $field = $('<input type="text" class="value" />');
+			$field.attr('placeholder', 'Value ' + (i + 1).toString());
+			$field.attr('index', i);
+			this.$box.append($field);
+			$field.on('mousedown click', function(evt) { evt.stopPropagation(); });
 
 			// This is an example of reacting on the input change and storing the input data in the cell model.
-			field.on('change', _.bind(function(evt)
+			$field.on('change', _.bind(function(evt)
 			{
 				var values = this.model.get('values').slice(0);
 				values[$(evt.target).attr('index')] = $(evt.target).val();
@@ -510,14 +510,14 @@ func.flash = function(text)
 	$flash.fadeOut({ duration: 1500 });
 };
 
-func.apply_text_fields = function()
+func.apply_fields = function()
 {
-	$('input[type=text]').blur();
+	$('input[type=text], select').blur();
 };
 
 func.save = function()
 {
-	func.apply_text_fields();
+	func.apply_fields();
 
 	if (!state.filepath)
 		func.show_save_dialog();
@@ -572,19 +572,16 @@ func.clear = function()
 {
 	state.graph.clear();
 	state.filepath = null;
+	document.title = 'Dialogger';
 };
 
 func.handle_open_files = function(files)
 {
 	state.filepath = files[0].path;
+	var data = fs.readFileSync(state.filepath);
 	document.title = func.filename_from_filepath(state.filepath);
-	var fileReader = new FileReader();
-	fileReader.onload = function(e)
-	{
-		state.graph.clear();
-		state.graph.fromJSON(JSON.parse(e.target.result));
-	};
-	fileReader.readAsText(files[0]);
+	state.graph.clear();
+	state.graph.fromJSON(JSON.parse(data));
 };
 
 func.handle_save_files = function(files)
@@ -619,12 +616,12 @@ func.handle_save_files = function(files)
 			state.mouse_position.x = e.pageX;
 			state.mouse_position.y = e.pageY;
 			$('body').css('cursor', 'move');
-			func.apply_text_fields();
+			func.apply_fields();
 		}
 	});
 	state.paper.on('cell:pointerdown', function(e, x, y)
 	{
-		func.apply_text_fields();
+		func.apply_fields();
 	});
 
 	$('#container').mousemove(function(e)
@@ -647,7 +644,12 @@ func.handle_save_files = function(files)
 
 	$('#file_open').on('change', function()
 	{
-		func.handle_open_files(this.files);
+		if (this.files)
+			func.handle_open_files(this.files);
+		// clear files from this input
+		var $this = $(this);
+		$this.wrap('<form>').parent('form').trigger('reset');
+		$this.unwrap();
 	});
 
 	$('#file_save').on('change', function()
@@ -702,7 +704,7 @@ func.handle_save_files = function(files)
 
 	$(window).resize(function()
 	{
-		func.apply_text_fields();
+		func.apply_fields();
 		var $window = $(window);
 		var $container = $('#container');
 		$container.height($window.innerHeight());

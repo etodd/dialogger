@@ -147,7 +147,7 @@ Node styles
 	z-index: 2;
 }
 
-.node input, button
+.node input, button, select
 {
 	/* Enable interacting with inputs only. */
 	pointer-events: auto;	
@@ -212,11 +212,12 @@ button.delete:hover
 	background-color: #dc5;
 }
 
-.node input
+.node input, select
 {
 	width: 100%;
 	padding: 4px;
 	margin-top: 8px;
+	display: block;
 }
 
 .node
