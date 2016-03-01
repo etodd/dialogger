@@ -165,6 +165,7 @@ joint.shapes.dialogue.Text = joint.shapes.devs.Model.extend(
 			type: 'dialogue.Text',
 			inPorts: ['input'],
 			outPorts: ['output'],
+			size: { width: 200, height: 100, },
 			attrs:
 			{
 				'.outPorts circle': { unlimitedConnections: ['dialogue.Choice'], }
@@ -173,7 +174,54 @@ joint.shapes.dialogue.Text = joint.shapes.devs.Model.extend(
 		joint.shapes.dialogue.Base.prototype.defaults
 	),
 });
-joint.shapes.dialogue.TextView = joint.shapes.dialogue.BaseView;
+joint.shapes.dialogue.TextView = joint.shapes.dialogue.BaseView.extend(
+{
+	template:
+	[
+		'<div class="node">',
+		'<span class="label"></span>',
+		'<button class="delete">x</button>',
+		'<input type="text" class="name" placeholder="Variable" />',
+		'<select name="face">',
+		'<option>Default</option>',
+		'<option>Sad</option>',
+		'<option>Upbeat</option>',
+		'<option>Urgent</option>',
+		'<option>EyesClosed</option>',
+		'<option>Smile</option>',
+		'<option>Wat</option>',
+		'<option>Unamused</option>',
+		'<option>Angry</option>',
+		'<option>Concerned</option>',
+		'</select>',
+		'</div>',
+	].join(''),
+
+	initialize: function()
+	{
+		joint.shapes.dialogue.BaseView.prototype.initialize.apply(this, arguments);
+		var $select = this.$box.find('select');
+		$select.on('change', _.bind(function(evt)
+		{
+			this.model.set('face', $(evt.target).val());
+		}, this));
+		$select.on('mousedown click', function(evt) { evt.stopPropagation(); });
+	},
+
+	updateBox: function()
+	{
+		joint.shapes.dialogue.BaseView.prototype.updateBox.apply(this, arguments);
+		var $field = this.$box.find('select');
+		if (!$field.is(':focus'))
+		{
+			var face = this.model.get('face');
+			if (face)
+				$field.val(face);
+			else
+				$field.val('Default');
+		}
+	},
+});
 
 joint.shapes.dialogue.Choice = joint.shapes.devs.Model.extend(
 {
@@ -447,6 +495,12 @@ func.optimized_data = function()
 			{
 				node.variable = cell.name;
 				node.value = cell.value;
+				node.next = null;
+			}
+			else if (node.type === 'Text')
+			{
+				node.name = cell.name;
+				node.face = cell.face;
 				node.next = null;
 			}
 			else
