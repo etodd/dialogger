@@ -82,7 +82,7 @@ joint.shapes.dialogue.BaseView = joint.shapes.devs.ModelView.extend(
 		'<div class="node">',
 		'<span class="label"></span>',
 		'<button class="delete">x</button>',
-		'<input type="text" class="name" placeholder="Text" />',
+		'<input type="text" class="name" placeholder="ID" />',
 		'</div>',
 	].join(''),
 
@@ -181,7 +181,7 @@ joint.shapes.dialogue.TextView = joint.shapes.dialogue.BaseView.extend(
 		'<div class="node">',
 		'<span class="label"></span>',
 		'<button class="delete">x</button>',
-		'<input type="text" class="name" placeholder="Variable" />',
+		'<input type="text" class="name" placeholder="Text" />',
 		'<select name="face">',
 		'<option>Default</option>',
 		'<option>Sad</option>',
