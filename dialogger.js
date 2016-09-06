@@ -165,7 +165,7 @@ joint.shapes.dialogue.Text = joint.shapes.devs.Model.extend(
 			type: 'dialogue.Text',
 			inPorts: ['input'],
 			outPorts: ['output'],
-			size: { width: 200, height: 100, },
+			size: { width: 200, height: 124, },
 			attrs:
 			{
 				'.outPorts circle': { unlimitedConnections: ['dialogue.Choice'], }
@@ -199,6 +199,7 @@ joint.shapes.dialogue.TextView = joint.shapes.dialogue.BaseView.extend(
 		'<option>Evil</option>',
 		'<option>TongueOut</option>',
 		'</select>',
+		'<input type="text" name="delay" placeholder="Delay" />',
 		'</div>',
 	].join(''),
 
@@ -211,6 +212,11 @@ joint.shapes.dialogue.TextView = joint.shapes.dialogue.BaseView.extend(
 			this.model.set('face', $(evt.target).val());
 		}, this));
 		$select.on('mousedown click', function(evt) { evt.stopPropagation(); });
+		var $delay = this.$box.find('[name=delay]');
+		$delay.on('change', _.bind(function(evt)
+		{
+			this.model.set('delay', parseFloat($(evt.target).val()));
+		}, this));
 	},
 
 	updateBox: function()
@@ -224,6 +230,15 @@ joint.shapes.dialogue.TextView = joint.shapes.dialogue.BaseView.extend(
 				$field.val(face);
 			else
 				$field.val('Default');
+		}
+		$field = this.$box.find('[name=delay]');
+		if (!$field.is(':focus'))
+		{
+			var delay = this.model.get('delay');
+			if (delay)
+				$field.val(delay);
+			else
+				$field.val(0);
 		}
 	},
 });
@@ -506,6 +521,7 @@ func.optimized_data = function()
 			{
 				node.name = cell.name;
 				node.face = cell.face;
+				node.delay = cell.delay;
 				node.next = null;
 			}
 			else
